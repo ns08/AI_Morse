@@ -4,13 +4,18 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -492,11 +497,10 @@ class AssistantForegroundService : Service(), TextToSpeech.OnInitListener {
                 requestMethod = "POST"
                 connectTimeout = 10000
                 readTimeout = 20000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            }
-
-            val payload = JSONObject().apply {
+              doOutput = true
+setRequestProperty("Content-Type", "application/json; charset=utf-8")
+}
+val payload = JSONObject().apply {
 put("token", sharedToken)
 put("stage", stage)
 put("preferred_ai", aiMode)
@@ -542,10 +546,123 @@ false
 false
 }
 }
+private fun isVibrateModeActive(): Boolean {
+val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+return am.ringerMode == AudioManager.RINGER_MODE_VIBRATE
+}
+private fun getVibratorCompat(): Vibrator? {
+return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+vm?.defaultVibrator
+} else {
+@Suppress("DEPRECATION")
+getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+}
+}
+private fun textToMinimalMorseTimingsAndAmplitudes(
+text: String,
+maxChars: Int = 8
+): Pair<LongArray, IntArray>? {
+val morseMap = mapOf(
+'あ' to ".-", 'い' to "..", 'う' to "..-", 'え' to "-.-", 'お' to ".-...",
+'か' to ".-..", 'き' to "-.-..", 'く' to "...-", 'け' to "-.--", 'こ' to "----",
+'さ' to "-.-.-", 'し' to "--.-.", 'す' to "---.-", 'せ' to ".---.", 'そ' to "---.",
+'た' to "-", 'ち' to "..-", 'つ' to ".--.", 'て' to ".-.--", 'と' to "..-..",
+'な' to ".-.", 'に' to "-.-.", 'ぬ' to "....", 'ね' to "--.-", 'の' to "..--",
+'は' to "-...", 'ひ' to "--..-", 'ふ' to "--..", 'へ' to ".", 'ほ' to "-..",
+'ま' to "-..-", 'み' to "..-.-", 'む' to "-", 'め' to "-...-", 'も' to "-..--",
+'や' to ".--", 'ゆ' to "-..--", 'よ' to "--",
+'ら' to "...", 'り' to "--.", 'る' to "-.--.", 'れ' to "---", 'ろ' to ".-.-",
+'わ' to "-.-", 'を' to ".---", 'ん' to ".-.-."
+)
+val dotMs = 45L
+val dashMs = 135L
+val intraGapMs = 45L
+val charGapMs = 120L
+val lowAmplitude = 40
+val timings = mutableListOf<Long>()
+val amplitudes = mutableListOf<Int>()
+val target = text.take(maxChars)
+var addedAny = false
+for (ch in target) {
+val code = morseMap[ch] ?: continue
+if (addedAny) {
+timings.add(charGapMs)
+amplitudes.add(0)
+}
+for ((idx, symbol) in code.withIndex()) {
+if (idx > 0) {
+timings.add(intraGapMs)
+amplitudes.add(0)
+}
+val duration = if (symbol == '-') dashMs else dotMs
+timings.add(duration)
+amplitudes.add(lowAmplitude)
+}
+addedAny = true
+}
+if (!addedAny || timings.isEmpty()) return null
+val fullTimings = LongArray(timings.size + 1)
+val fullAmplitudes = IntArray(amplitudes.size + 1)
+fullTimings[0] = 0L
+fullAmplitudes[0] = 0
+for (i in timings.indices) {
+fullTimings[i + 1] = timings[i]
+fullAmplitudes[i + 1] = amplitudes[i]
+}
+return fullTimings to fullAmplitudes
+}
+private fun vibrateMorseMinimal(text: String) {
+val vibrator = getVibratorCompat()
+val pattern = textToMinimalMorseTimingsAndAmplitudes(text)
+if (vibrator == null || !vibrator.hasVibrator() || pattern == null) {
+val cb = onTtsDoneCallback
+onTtsDoneCallback = null
+mainHandler.post { cb?.invoke() }
+return
+}
+val (timings, amplitudes) = pattern
+val totalDurationMs = timings.sum()
+isSpeaking = true
+morseDetector?.paused = true
+mainHandler.post { speechRecognizer?.stopListening() }
+sendLog("ばいぶもーるす（さいしょうしんどう）: $text")
+try {
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+val effect = if (vibrator.hasAmplitudeControl()) {
+VibrationEffect.createWaveform(timings, amplitudes, -1)
+} else {
+VibrationEffect.createWaveform(timings, -1)
+}
+vibrator.vibrate(effect)
+} else {
+@Suppress("DEPRECATION")
+vibrator.vibrate(timings, -1)
+}
+} catch (_: Exception) {
+isSpeaking = false
+morseDetector?.paused = false
+return
+}
+mainHandler.postDelayed({
+isSpeaking = false
+morseDetector?.paused = false
+val cb = onTtsDoneCallback
+onTtsDoneCallback = null
+cb?.invoke()
+if (!isStopping && onTtsDoneCallback == null) {
+mainHandler.postDelayed({ restartSpeechRecognition() }, 350L)
+}
+}, totalDurationMs + 100L)
+}
 private fun speakHiragana(text: String) {
-if (!ttsReady) return
 val cleanHiragana = HiraganaNormalizer.toHiragana(text)
 if (cleanHiragana.isBlank()) return
+if (isVibrateModeActive()) {
+vibrateMorseMinimal(cleanHiragana)
+return
+}
+if (!ttsReady) return
 mainHandler.post {
 val id = UUID.randomUUID().toString()
 tts?.speak(cleanHiragana, TextToSpeech.QUEUE_FLUSH, null, id)
