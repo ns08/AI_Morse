@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Morse &amp; Voice AI（Gemini無料枠＋ローカルAI）"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="10dp" />
+
+        <EditText
+            android:id="@+id/etServerUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="サーバーURL: https://example.stars.ne.jp/morse_ai/api.php"
+            android:inputType="textUri"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etToken"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="サーバー共有トークン"
+            android:inputType="textPassword"
+            android:layout_marginBottom="10dp" />
+
+        <EditText
+            android:id="@+id/etLocalAiUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="ローカルAI URL: http://127.0.0.1:11434/v1/chat/completions"
+            android:inputType="textUri"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etLocalAiModel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="ローカルAI モデル名（例: gemma2:2b / qwen2.5:1.5b）"
+            android:inputType="text"
+            android:layout_marginBottom="8dp" />
+
+        <Spinner
+            android:id="@+id/spAiMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/btnStartService"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="常時サービス開始" />
+
+            <Button
+                android:id="@+id/btnStopService"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="停止" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnOpenAccessibility"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ユーザー補助（端末操作）設定を開く"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="状態: 待機中"
+            android:padding="10dp"
+            android:background="#EEEEEE"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ログ:
+"
+            android:textSize="13sp" />
+
+    </LinearLayout>
+</ScrollView>
