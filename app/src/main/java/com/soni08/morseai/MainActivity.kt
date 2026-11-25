@@ -160,8 +160,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun appendLog(line: String) {
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        tvLog.append("[$time] $line
-")
+        tvLog.append("[$time] $line\n")
     }
 
     override fun onDestroy() {
