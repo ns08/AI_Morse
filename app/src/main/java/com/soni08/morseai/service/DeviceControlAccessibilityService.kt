@@ -2,7 +2,10 @@ package com.soni08.morseai.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -40,6 +43,14 @@ class DeviceControlAccessibilityService : AccessibilityService() {
             private set
 
         fun isRunning(): Boolean = instance != null
+
+        /**
+         * AssistantForegroundService などからアクション文字列を実行するエントリーポイント。
+         */
+        fun executeAction(rawAction: String): Boolean {
+            val service = instance ?: return false
+            return service.performParsedAction(rawAction)
+        }
     }
 
     override fun onServiceConnected() {
@@ -93,6 +104,61 @@ class DeviceControlAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * AssistantForegroundService から渡されるアクション文字列を解釈して実行する。
+     */
+    private fun performParsedAction(rawAction: String): Boolean {
+        return try {
+            when {
+                rawAction.startsWith("OPEN_URL:") -> {
+                    val url = rawAction.removePrefix("OPEN_URL:").trim()
+                    if (url.isEmpty()) return false
+                    openExternalUri(url)
+                }
+
+                rawAction.startsWith("PLAY_MUSIC:") -> {
+                    val payload = rawAction.removePrefix("PLAY_MUSIC:")
+                    val ytUrl = payload.substringAfter("|", "").trim()
+                    if (ytUrl.isEmpty()) return false
+                    openExternalUri(ytUrl)
+                }
+
+                rawAction.startsWith("CHAT_SEND:") -> {
+                    // 相手・メッセージの自動入力や送信は画面構成依存のため、必要に応じて実装を追加
+                    Log.w(TAG, "CHAT_SEND is not yet automated: $rawAction")
+                    false
+                }
+
+                rawAction == "ACTION_BACK" -> executeCommand(CMD_BACK)
+                rawAction == "ACTION_HOME" -> executeCommand(CMD_HOME)
+                rawAction == "ACTION_NOTIFICATIONS" -> executeCommand(CMD_NOTIFICATIONS)
+                rawAction == "ACTION_RECENTS" -> executeCommand(CMD_RECENTS)
+                rawAction == "ACTION_VOLUME_UP" -> adjustVolume(raise = true)
+                rawAction == "ACTION_VOLUME_DOWN" -> adjustVolume(raise = false)
+
+                else -> executeCommand(rawAction)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to execute action: $rawAction", e)
+            false
+        }
+    }
+
+    private fun openExternalUri(url: String): Boolean {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
+        return true
+    }
+
+    private fun adjustVolume(raise: Boolean): Boolean {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        val direction = if (raise) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
+        audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
+        return true
+    }
+
+    /**
      * 外部（Activity / Service / Receiver）からコマンドを実行するエントリーポイント。
      */
     fun executeCommand(command: String, text: String? = null): Boolean {
@@ -116,9 +182,6 @@ class DeviceControlAccessibilityService : AccessibilityService() {
         }
     }
 
-    /**
-     * 現在のフォーカスノード、または入力／操作対象になり得るノードを取得する。
-     */
     private fun findTargetNode(requireEditable: Boolean = false): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: return null
 
@@ -153,9 +216,6 @@ class DeviceControlAccessibilityService : AccessibilityService() {
         return null
     }
 
-    /**
-     * 画面内の操作可能な要素を収集して順序通りに走査する。
-     */
     private fun collectInteractiveNodes(node: AccessibilityNodeInfo?, out: MutableList<AccessibilityNodeInfo>) {
         if (node == null) return
         if (node.isVisibleToUser && node.isEnabled && (node.isClickable || node.isEditable || node.isFocusable)) {
@@ -220,10 +280,6 @@ class DeviceControlAccessibilityService : AccessibilityService() {
         return false
     }
 
-    /**
-     * IME の Enter アクションを実行する（API 30 / Android 11 以降）。
-     * 以前はここで ACTION_IME_ENTER の参照解決エラーが起きていた箇所。
-     */
     private fun performImeEnter(): Boolean {
         val target = findTargetNode(requireEditable = true) ?: findTargetNode(requireEditable = false) ?: return false
 
@@ -233,7 +289,6 @@ class DeviceControlAccessibilityService : AccessibilityService() {
             }
         }
 
-        // フォールバック：クリックまたはフォーカス確定を試行
         return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
     }
 
