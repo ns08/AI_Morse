@@ -144,13 +144,6 @@ class AssistantForegroundService : Service(), TextToSpeech.OnInitListener {
     private fun startMorseDetector() {
         if (morseDetector != null) return
         morseDetector = ToneCountMorseDetector(
-            onShortcutTriggered = { pattern, actionOrPackage ->
-                if (!isSpeaking) {
-                    val hiraCmd = HiraganaNormalizer.toHiragana(actionOrPackage)
-                    sendLog("もーるすしょーとかっと: $pattern -> $hiraCmd")
-                    handleRecognizedHiraganaInput(hiraCmd, "morse:$pattern")
-                }
-            },
             onToneBurstCompleted = { count, symbol ->
                 sendLog("とんけんしゅつ: ${count}かい -> $symbol")
             },
@@ -504,111 +497,100 @@ class AssistantForegroundService : Service(), TextToSpeech.OnInitListener {
             }
 
             val payload = JSONObject().apply {
-                put("token", sharedToken)
-                put("stage", stage)
-                put("preferred_ai", aiMode)
-                put("input_type", if (rawText.startsWith("morse:")) "morse" else "voice")
-                put("text", hiraText)
-                put("raw_text", rawText)
-                put("morse_pattern", if (rawText.startsWith("morse:")) rawText.removePrefix("morse:") else "")
-            }
-
-            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(payload.toString())
-                writer.flush()
-            }
-
-            val code = conn.responseCode
-            val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
-            conn.disconnect()
-
-            if (code !in 200..299 || body.isBlank()) return false
-
-            val json = JSONObject(body)
-            val requiresConfirmation = json.optBoolean("requires_confirmation", false)
-            val confirmPrompt = HiraganaNormalizer.toHiragana(json.optString("confirm_prompt", ""))
-            val action = json.optString("action", "")
-            val resultSummary = HiraganaNormalizer.toHiragana(json.optString("result_summary", ""))
-            val reply = HiraganaNormalizer.toHiragana(json.optString("reply", ""))
-            val usedAi = json.optString("used_ai", "gemini")
-
-            if (requiresConfirmation && action.isNotEmpty() && action != "null") {
-                pendingExecution = PendingExecution(
-                    action = action,
-                    resultSummary = resultSummary.ifBlank { "じっこうに せいこうしました" },
-                    originalCommandText = hiraText
-                )
-                val promptToSpeak = confirmPrompt.ifBlank { "$hiraText をじっこうします。おっけいかきょかとってください" }
-                sendLog("ふくしょう・かくにんまち: $promptToSpeak")
-                speakHiragana(promptToSpeak)
-                true
-            } else if (reply.isNotEmpty() && usedAi != "none") {
-                sendLog("えーあいおうとう（$usedAi）: $reply")
-                speakHiragana(reply)
-                true
-            } else {
-                false
-            }
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    private fun speakHiragana(text: String) {
-        if (!ttsReady) return
-        val cleanHiragana = HiraganaNormalizer.toHiragana(text)
-        if (cleanHiragana.isBlank()) return
-        mainHandler.post {
-            val id = UUID.randomUUID().toString()
-            tts?.speak(cleanHiragana, TextToSpeech.QUEUE_FLUSH, null, id)
-        }
-    }
-
-    private fun sendLog(msg: String) {
-        val intent = Intent(BROADCAST_LOG).apply {
-            setPackage(packageName)
-            putExtra(EXTRA_LOG_MSG, msg)
-        }
-        sendBroadcast(intent)
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel(
-                CHANNEL_ID,
-                "Morse & Voice AI Service",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(ch)
-        }
-    }
-
-    private fun buildNotification(content: String): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("もーるす＆おんせい えーあい かどうちゅう")
-            .setContentText(content)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setOngoing(true)
-            .build()
-    }
-
-    override fun onDestroy() {
-        isStopping = true
-        onTtsDoneCallback = null
-        morseDetector?.stop()
-        morseDetector = null
-        mainHandler.post {
-            speechRecognizer?.destroy()
-            speechRecognizer = null
-        }
-        tts?.stop()
-        tts?.shutdown()
-        tts = null
-        networkExecutor.shutdownNow()
-        super.onDestroy()
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
+put("token", sharedToken)
+put("stage", stage)
+put("preferred_ai", aiMode)
+put("input_type", if (rawText.startsWith("morse:")) "morse" else "voice")
+put("text", hiraText)
+put("raw_text", rawText)
+put("morse_pattern", if (rawText.startsWith("morse:")) rawText.removePrefix("morse:") else "")
+}
+OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
+writer.write(payload.toString())
+writer.flush()
+}
+val code = conn.responseCode
+val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
+conn.disconnect()
+if (code !in 200..299 || body.isBlank()) return false
+val json = JSONObject(body)
+val requiresConfirmation = json.optBoolean("requires_confirmation", false)
+val confirmPrompt = HiraganaNormalizer.toHiragana(json.optString("confirm_prompt", ""))
+val action = json.optString("action", "")
+val resultSummary = HiraganaNormalizer.toHiragana(json.optString("result_summary", ""))
+val reply = HiraganaNormalizer.toHiragana(json.optString("reply", ""))
+val usedAi = json.optString("used_ai", "gemini")
+if (requiresConfirmation && action.isNotEmpty() && action != "null") {
+pendingExecution = PendingExecution(
+action = action,
+resultSummary = resultSummary.ifBlank { "じっこうに せいこうしました" },
+originalCommandText = hiraText
+)
+val promptToSpeak = confirmPrompt.ifBlank { "$hiraText をじっこうします。おっけいかきょかとってください" }
+sendLog("ふくしょう・かくにんまち: $promptToSpeak")
+speakHiragana(promptToSpeak)
+true
+} else if (reply.isNotEmpty() && usedAi != "none") {
+sendLog("えーあいおうとう（$usedAi）: $reply")
+speakHiragana(reply)
+true
+} else {
+false
+}
+} catch (_: Exception) {
+false
+}
+}
+private fun speakHiragana(text: String) {
+if (!ttsReady) return
+val cleanHiragana = HiraganaNormalizer.toHiragana(text)
+if (cleanHiragana.isBlank()) return
+mainHandler.post {
+val id = UUID.randomUUID().toString()
+tts?.speak(cleanHiragana, TextToSpeech.QUEUE_FLUSH, null, id)
+}
+}
+private fun sendLog(msg: String) {
+val intent = Intent(BROADCAST_LOG).apply {
+setPackage(packageName)
+putExtra(EXTRA_LOG_MSG, msg)
+}
+sendBroadcast(intent)
+}
+private fun createNotificationChannel() {
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+val ch = NotificationChannel(
+CHANNEL_ID,
+"Morse & Voice AI Service",
+NotificationManager.IMPORTANCE_LOW
+)
+val nm = getSystemService(NotificationManager::class.java)
+nm.createNotificationChannel(ch)
+}
+}
+private fun buildNotification(content: String): Notification {
+return NotificationCompat.Builder(this, CHANNEL_ID)
+.setContentTitle("もーるす＆おんせい えーあい かどうちゅう")
+.setContentText(content)
+.setSmallIcon(android.R.drawable.ic_btn_speak_now)
+.setOngoing(true)
+.build()
+}
+override fun onDestroy() {
+isStopping = true
+onTtsDoneCallback = null
+morseDetector?.stop()
+morseDetector = null
+mainHandler.post {
+speechRecognizer?.destroy()
+speechRecognizer = null
+}
+tts?.stop()
+tts?.shutdown()
+tts = null
+networkExecutor.shutdownNow()
+super.onDestroy()
+}
+override fun onBind(intent: Intent?): IBinder? = null
 }
