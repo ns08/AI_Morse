@@ -76,7 +76,7 @@ object HiraganaNormalizer {
             }
         }
 
-        return result.replace(Regex("\s+"), " ").trim()
+        return result.replace(Regex("\\s+"), " ").trim()
     }
 
     fun isApproval(input: String): Boolean {
