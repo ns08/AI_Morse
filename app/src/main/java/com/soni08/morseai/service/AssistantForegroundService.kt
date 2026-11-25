@@ -250,7 +250,7 @@ class AssistantForegroundService : Service(), TextToSpeech.OnInitListener {
 
     private fun parseCommandLocally(hiraText: String): LocalCommandParseResult? {
         // 1. Xリアルタイム検索
-        val xMatch = Regex("^(?:えっくすで|りあるたいむけんさく(?:で)?|やふーりあるたいむ(?:で)?)\s*(.+?)(?:をけんさく)?$").find(hiraText)
+        val xMatch = Regex("^(?:えっくすで|りあるたいむけんさく(?:で)?|やふーりあるたいむ(?:で)?)\\s*(.+?)(?:をけんさく)?$").find(hiraText)
         if (xMatch != null) {
             val q = xMatch.groupValues[1].trim()
             val url = "https://search.yahoo.co.jp/realtime/search?p=" + Uri.encode(q)
@@ -263,7 +263,7 @@ class AssistantForegroundService : Service(), TextToSpeech.OnInitListener {
         }
 
         // 2. Google検索
-        val gMatch1 = Regex("^(?:ぐーぐるで|けんさく(?:して)?)\s*(.+)$").find(hiraText)
+        val gMatch1 = Regex("^(?:ぐーぐるで|けんさく(?:して)?)\\s*(.+)$").find(hiraText)
         val gMatch2 = Regex("^(.+?)(?:をぐーぐるけんさく|をけんさく(?:して)?)$").find(hiraText)
         val gQuery = (gMatch1 ?: gMatch2)?.groupValues?.getOrNull(1)?.trim()
         if (!gQuery.isNullOrEmpty()) {
@@ -277,7 +277,7 @@ class AssistantForegroundService : Service(), TextToSpeech.OnInitListener {
         }
 
         // 3. 音楽再生
-        val mMatch1 = Regex("^(?:おんがくけんさく|きょくけんさく|さいせい(?:して)?)\s*(.+)$").find(hiraText)
+        val mMatch1 = Regex("^(?:おんがくけんさく|きょくけんさく|さいせい(?:して)?)\\s*(.+)$").find(hiraText)
         val mMatch2 = Regex("^(.+?)(?:のきょくをさいせい|をさいせい(?:して)?|のおんがくをさいせい)$").find(hiraText)
         val song = (mMatch1 ?: mMatch2)?.groupValues?.getOrNull(1)?.trim()
         if (!song.isNullOrEmpty()) {
@@ -291,7 +291,7 @@ class AssistantForegroundService : Service(), TextToSpeech.OnInitListener {
         }
 
         // 4. LINE送信
-        val chatMatch = Regex("^(?:らいんで|ちゃっとで)?\s*(.+?)に(.+?)(?:とおくる|とそうしん|をおくる|をそうしん)$").find(hiraText)
+        val chatMatch = Regex("^(?:らいんで|ちゃっとで)?\\s*(.+?)に(.+?)(?:とおくる|とそうしん|をおくる|をそうしん)$").find(hiraText)
         if (chatMatch != null) {
             val target = chatMatch.groupValues[1].trim()
             val msg = chatMatch.groupValues[2].trim()
